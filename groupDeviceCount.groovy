@@ -46,7 +46,7 @@ groupArray.each { item ->
 }
 
 holder.each { item ->
-	println(item);
+	println(item.id + '##' + item.name + '######' + 'auto.location=' + item.location);
 }
 
 //println('body. ' + responseBody);
