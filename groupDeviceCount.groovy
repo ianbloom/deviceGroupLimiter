@@ -18,9 +18,9 @@ import groovy.json.JsonSlurper;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.entity.ContentType;
 
-def accessId = "dSpe6j9eTQXs3Iph7jCU";
-def accessKey = "dcm!p2d2w79V=5f}+[354xL=g{k442Y6h5qV}C_6";
-def account = "ianbloom";
+def accessId = hostProps.get("lmaccess.id");
+def accessKey = hostProps.get("lmaccess.key");
+def account = hostProps.get("lmaccount");
 // Obtain deviceId from host level properties
 def deviceId = hostProps.get("system.deviceId");
 
