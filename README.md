@@ -1,4 +1,4 @@
-# deviceGroupLimiter
+# groupDeviceCount
 ## Introduction
 The Group Device Count DataSource utilizes the LogicMonitor API to query device group folders for their respective device
 counts.  These device group folders exist as instances.  The DataSource then uses the API to update instance level alert
