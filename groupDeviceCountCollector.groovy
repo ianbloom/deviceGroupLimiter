@@ -22,12 +22,14 @@ def accessId = "dSpe6j9eTQXs3Iph7jCU";
 def accessKey = "dcm!p2d2w79V=5f}+[354xL=g{k442Y6h5qV}C_6";
 def account = "ianbloom";
 
+// Obtain all the necessary parameters for the coming HTTP requests
 def wildvalue = instanceProps.get("wildvalue");
 def wildalias = instanceProps.get("wildalias");
 def deviceId = hostProps.get("system.deviceId");
 def deviceLimit = instanceProps.get("auto.device_limit");
 def deviceDataSourceId = instanceProps.get("auto.device_datasource_id");
 
+// GET a list of devices in ##WILDVALUE## group
 def resourcePath = "/device/groups/" + wildvalue + "/devices";
 def queryParameters = "?size=1000";
 def data = "";
@@ -37,8 +39,10 @@ responseBody = responseDict.body;
 responseCode = responseDict.code;
 
 output = new JsonSlurper().parseText(responseBody);
-	
+
+// total corresponds to the number of devices returned in the items array of data in the GET request
 deviceCount = output.data.total;
+// Output for device_count datapoint
 println("device_count=" + deviceCount);
 
 
@@ -46,6 +50,7 @@ println("device_count=" + deviceCount);
 // ALERT MODIFICATION //
 ////////////////////////
 
+// First, we use our previously obtained deviceId and deviceDataSourceId to obtain the instanceId of our current instance
 resourcePath = "/device/devices/" + deviceId + "/devicedatasources/" + deviceDataSourceId + "/instances"
 queryParameters = "?filter=displayName:" + wildalias;
 data = ""
@@ -58,7 +63,11 @@ output = new JsonSlurper().parseText(responseBody);
 
 instanceId = output.data.items[0].id;
 
-// deviceId || deviceDataSourceId || instanceId // NOW WE GET INSTANCE LEVEL THRESHHOLD ID
+// Now we have:
+// deviceId || deviceDataSourceId || instanceId 
+//
+// Let's GET:
+// alertSettingId = Instance level alert threshhold
 
 resourcePath = "/device/devices/" + deviceId + "/devicedatasources/" + deviceDataSourceId + "/instances/" + instanceId + "/alertsettings";
 queryParameters = "";
@@ -72,7 +81,11 @@ output = new JsonSlurper().parseText(responseBody);
 
 alertSettingId = output.data.items[0].id;
 
-// deviceId || deviceDataSourceId || instanceId || alertSettingId // must POST alertExpr
+// Now we have:
+// deviceId || deviceDataSourceId || instanceId || alertSettingId 
+//
+// Let's POST:
+// alertExpr = Payload modifying alert threshold
 
 resourcePath = "/device/devices/" + deviceId + "/devicedatasources/" + deviceDataSourceId + "/instances/" + instanceId + "/alertsettings/" + alertSettingId;
 queryParameters = "";
