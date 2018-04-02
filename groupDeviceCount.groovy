@@ -21,20 +21,21 @@ import org.apache.http.entity.ContentType;
 def accessId = "dSpe6j9eTQXs3Iph7jCU";
 def accessKey = "dcm!p2d2w79V=5f}+[354xL=g{k442Y6h5qV}C_6";
 def account = "ianbloom";
-// WE NEED TO GET THIS AUTOMATICALLY
+// Obtain deviceId from host level properties
 def deviceId = hostProps.get("system.deviceId");
 
+// GET all groups and their corresponding id, name, and customProperties fields
 def resourcePath = "/device/groups";
 def queryParameters = "?fields=id,name,customProperties";
 def data = "";
 
-// Get all groups, and their id, name, and customProperties fields
 responseDict = LMGET(accessId, accessKey, account, resourcePath, queryParameters, data);
 responseBody = responseDict.body;
 responseCode = responseDict.code;
 
 output = new JsonSlurper().parseText(responseBody);
 
+// Isolate array containing groups
 groupArray = output.data.items;
 
 // Initialize holder array to hold a dictionary corresponding to each group
@@ -57,8 +58,8 @@ groupArray.each { item ->
 	}
 }
 
-// Now we obtain the Group Device Count DataSource
 
+// Now we GET the Group_Device_Count datasource
 resourcePath = "/device/devices/" + deviceId + "/devicedatasources";
 queryParameters = "?filter=dataSourceName:Group_Device_Count";
 data = "";
@@ -70,14 +71,13 @@ responseCode = responseDict.code;
 
 output = new JsonSlurper().parseText(responseBody);
 
-// Why in the world there is a device datasource ID i will never know
+// Why in the world there is a device datasource ID I will never know
 deviceDataSourceId = output.data.items[0].id;
 
 // Output for Active Discovery script
 holder.each { item ->
 	println(item.id + '##' + item.name + '######' + 'auto.device_limit=' + item.device_limit + '&auto.device_datasource_id=' + deviceDataSourceId);
 }
-
 
 
 return 0;
