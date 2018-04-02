@@ -1,3 +1,8 @@
+import com.santaba.agent.groovyapi.expect.Expect;
+import com.santaba.agent.groovyapi.snmp.Snmp;
+import com.santaba.agent.groovyapi.http.*;
+import com.santaba.agent.groovyapi.jmx.*;
+import org.xbill.DNS.*;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -17,7 +22,7 @@ def accessId = "dSpe6j9eTQXs3Iph7jCU";
 def accessKey = "dcm!p2d2w79V=5f}+[354xL=g{k442Y6h5qV}C_6";
 def account = "ianbloom";
 // WE NEED TO GET THIS AUTOMATICALLY
-def deviceId = 1;
+def deviceId = hostProps.get("system.deviceId");
 
 def resourcePath = "/device/groups";
 def queryParameters = "?fields=id,name,customProperties";

@@ -3,7 +3,6 @@ import com.santaba.agent.groovyapi.snmp.Snmp;
 import com.santaba.agent.groovyapi.http.*;
 import com.santaba.agent.groovyapi.jmx.*;
 import org.xbill.DNS.*;
-
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -25,6 +24,9 @@ def account = "ianbloom";
 
 def wildvalue = instanceProps.get("wildvalue");
 def wildalias = instanceProps.get("wildalias");
+def deviceId = hostProps.get("system.deviceId");
+def deviceLimit = instanceProps.get("auto.device_limit");
+def deviceDataSourceId = instanceProps.get("auto.device_datasource_id");
 
 def resourcePath = "/device/groups/" + wildvalue + "/devices";
 def queryParameters = "?size=1000";
@@ -38,6 +40,50 @@ output = new JsonSlurper().parseText(responseBody);
 	
 deviceCount = output.data.total;
 println("device_count=" + deviceCount);
+
+
+////////////////////////
+// ALERT MODIFICATION //
+////////////////////////
+
+resourcePath = "/device/devices/" + deviceId + "/devicedatasources/" + deviceDataSourceId + "/instances"
+queryParameters = "?filter=displayName:" + wildalias;
+data = ""
+
+responseDict = LMGET(accessId, accessKey, account, resourcePath, queryParameters, data);
+responseBody = responseDict.body;
+responseCode = responseDict.code;
+
+output = new JsonSlurper().parseText(responseBody);
+
+instanceId = output.data.items[0].id;
+
+// deviceId || deviceDataSourceId || instanceId // NOW WE GET INSTANCE LEVEL THRESHHOLD ID
+
+resourcePath = "/device/devices/" + deviceId + "/devicedatasources/" + deviceDataSourceId + "/instances/" + instanceId + "/alertsettings";
+queryParameters = "";
+data = "";
+
+responseDict = LMGET(accessId, accessKey, account, resourcePath, queryParameters, data);
+responseBody = responseDict.body;
+responseCode = responseDict.code;
+
+output = new JsonSlurper().parseText(responseBody);
+
+alertSettingId = output.data.items[0].id;
+
+// deviceId || deviceDataSourceId || instanceId || alertSettingId // must POST alertExpr
+
+resourcePath = "/device/devices/" + deviceId + "/devicedatasources/" + deviceDataSourceId + "/instances/" + instanceId + "/alertsettings/" + alertSettingId;
+queryParameters = "";
+data = '{"alertExpr":"> ' + deviceLimit + '"}';
+
+responseDict = LMPUT(accessId, accessKey, account, resourcePath, queryParameters, data);
+responseBody = responseDict.body;
+responseCode = responseDict.code;
+
+output = new JsonSlurper().parseText(responseBody);
+
 
 return 0;
 
