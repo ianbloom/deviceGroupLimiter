@@ -82,9 +82,9 @@ holder.each { item ->
 
 return 0;
 
-/////////////////////////////////////
-// Santa's Little Helper Functions //
-/////////////////////////////////////
+///////////////////////
+//  Helper Functions //
+///////////////////////
 
 def LMPUT(_accessId, _accessKey, _account, _resourcePath, _queryParameters, _data) {
 
