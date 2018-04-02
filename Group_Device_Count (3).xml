@@ -1,0 +1,572 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<feed  version="1.0" hasPendingRequests="false" >
+  <company></company>
+  <status>200</status>
+  <errmsg>OK</errmsg>
+  <interval>0</interval>
+    <entry type="predatasource">
+        <version>1522706917</version>
+        <name>Group_Device_Count</name>
+        <displayedas>Group Device Count</displayedas>
+        <description>This DataSource collects device groups with the &#34;device_limit&#34; property as instances.  It monitors the device count of these instances, and dynamically updates instance level alert thresholds for each group based on the &#34;device_limit&#34; property.  Set &#34;device_limit&#34; to zero to turn off alerting for an instance.</description>
+        <collector>script</collector>
+        <hasMultiInstances>true</hasMultiInstances>
+        <schedule>60</schedule>
+        <appliesTo>system.displayname == &#34;Amazon EC2 SNMP&#34;</appliesTo>
+        <wildcardauto>true</wildcardauto>
+        <wildcardpersist>false</wildcardpersist>
+        <wildcardlinuxscript>ad_script</wildcardlinuxscript>
+        <wildcardlinuxcmdline>type=&#34;embeded&#34; </wildcardlinuxcmdline>
+        <wildcardwinscript>ad_script</wildcardwinscript>
+        <wildcardwincmdline>type=&#34;embeded&#34; </wildcardwincmdline>
+        <wildcardgroovyscript>import com.santaba.agent.groovyapi.expect.Expect;
+import com.santaba.agent.groovyapi.snmp.Snmp;
+import com.santaba.agent.groovyapi.http.*;
+import com.santaba.agent.groovyapi.jmx.*;
+import org.xbill.DNS.*;
+import org.apache.http.HttpEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpPut;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients
+import org.apache.http.util.EntityUtils;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import org.apache.commons.codec.binary.Hex;
+import groovy.json.JsonSlurper;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.entity.ContentType;
+
+def accessId = hostProps.get(&#34;lmaccess.id&#34;);
+def accessKey = hostProps.get(&#34;lmaccess.key&#34;);
+def account = hostProps.get(&#34;lmaccount&#34;);
+// Obtain deviceId from host level properties
+def deviceId = hostProps.get(&#34;system.deviceId&#34;);
+
+// GET all groups and their corresponding id, name, and customProperties fields
+def resourcePath = &#34;/device/groups&#34;;
+def queryParameters = &#34;?fields=id,name,customProperties&#34;;
+def data = &#34;&#34;;
+
+responseDict = LMGET(accessId, accessKey, account, resourcePath, queryParameters, data);
+responseBody = responseDict.body;
+responseCode = responseDict.code;
+
+output = new JsonSlurper().parseText(responseBody);
+
+// Isolate array containing groups
+groupArray = output.data.items;
+
+// Initialize holder array to hold a dictionary corresponding to each group
+holder = [];
+
+// Iterate through output of GET request for device groups
+groupArray.each { item -&#62;
+	customPropertiesArray = item.customProperties;
+	// Iterate through the customProperties for each group in groupArray
+	customPropertiesArray.each { thing -&#62;
+		// If we come across the device_limit custom property, then we want to monitor this group
+		if(thing.name == &#39;device_limit&#39;) {
+			// Initialize groupDict which will be appended to the holder array and add groupId, groupName, and device_limit value
+			groupDict = [:];
+			groupDict[&#39;id&#39;] = item.id;
+			groupDict[&#39;name&#39;] = item.name;
+			groupDict[&#39;device_limit&#39;] = thing.value;
+			holder.add(groupDict);
+		}
+	}
+}
+
+
+// Now we GET the Group_Device_Count datasource
+resourcePath = &#34;/device/devices/&#34; + deviceId + &#34;/devicedatasources&#34;;
+queryParameters = &#34;?filter=dataSourceName:Group_Device_Count&#34;;
+data = &#34;&#34;;
+
+// Get the ID of the Group Device Count DataSource
+responseDict = LMGET(accessId, accessKey, account, resourcePath, queryParameters, data);
+responseBody = responseDict.body;
+responseCode = responseDict.code;
+
+output = new JsonSlurper().parseText(responseBody);
+
+// Why in the world there is a device datasource ID I will never know
+deviceDataSourceId = output.data.items[0].id;
+
+// Output for Active Discovery script
+holder.each { item -&#62;
+	println(item.id + &#39;##&#39; + item.name + &#39;######&#39; + &#39;auto.device_limit=&#39; + item.device_limit + &#39;&#38;auto.device_datasource_id=&#39; + deviceDataSourceId);
+}
+
+
+return 0;
+
+///////////////////////
+//  Helper Functions //
+///////////////////////
+
+def LMPUT(_accessId, _accessKey, _account, _resourcePath, _queryParameters, _data) {
+
+	// Initialize dictionary to hold response code and response body
+	responseDict = [:];
+
+	// Construcst URL to POST to from specified input
+	url = &#39;https://&#39; + _account + &#39;.logicmonitor.com&#39; + &#39;/santaba/rest&#39; + _resourcePath + _queryParameters;
+
+	StringEntity params = new StringEntity(_data,ContentType.APPLICATION_JSON);
+
+	// Get current time
+	epoch = System.currentTimeMillis();
+
+	// Calculate signature
+	requestVars = &#39;PUT&#39; + epoch + _data + _resourcePath;
+
+	hmac = Mac.getInstance(&#39;HmacSHA256&#39;);
+	secret = new SecretKeySpec(_accessKey.getBytes(), &#39;HmacSHA256&#39;);
+	hmac.init(secret);
+	hmac_signed = Hex.encodeHexString(hmac.doFinal(requestVars.getBytes()));
+	signature = hmac_signed.bytes.encodeBase64();
+
+	// HTTP Get
+	CloseableHttpClient httpclient = HttpClients.createDefault();
+	http_request = new HttpPut(url);
+	http_request.addHeader(&#34;Authorization&#34; , &#34;LMv1 &#34; + _accessId + &#34;:&#34; + signature + &#34;:&#34; + epoch);
+	http_request.setHeader(&#34;Accept&#34;, &#34;application/json&#34;);
+	http_request.setHeader(&#34;Content-type&#34;, &#34;application/json&#34;);
+	http_request.setEntity(params);
+	response = httpclient.execute(http_request);
+	responseBody = EntityUtils.toString(response.getEntity());
+	code = response.getStatusLine().getStatusCode();
+
+	responseDict[&#39;code&#39;] = code;
+	responseDict[&#39;body&#39;] = responseBody
+	
+	return responseDict;
+}
+
+def LMGET(_accessId, _accessKey, _account, _resourcePath, _queryParameters, _data) {
+	// DATA SHOULD BE EMPTY
+	// Initialize dictionary to hold response code and response body
+	responseDict = [:];
+
+	// Construcst URL to POST to from specified input
+	url = &#39;https://&#39; + _account + &#39;.logicmonitor.com&#39; + &#39;/santaba/rest&#39; + _resourcePath + _queryParameters;
+
+	// Get current time
+	epoch = System.currentTimeMillis();
+
+	// Calculate signature
+	requestVars = &#39;GET&#39; + epoch + _data + _resourcePath;
+
+	hmac = Mac.getInstance(&#39;HmacSHA256&#39;);
+	secret = new SecretKeySpec(_accessKey.getBytes(), &#39;HmacSHA256&#39;);
+	hmac.init(secret);
+	hmac_signed = Hex.encodeHexString(hmac.doFinal(requestVars.getBytes()));
+	signature = hmac_signed.bytes.encodeBase64();
+
+	// HTTP Get
+	CloseableHttpClient httpclient = HttpClients.createDefault();
+	http_request = new HttpGet(url);
+	http_request.addHeader(&#34;Authorization&#34; , &#34;LMv1 &#34; + _accessId + &#34;:&#34; + signature + &#34;:&#34; + epoch);
+	response = httpclient.execute(http_request);
+	responseBody = EntityUtils.toString(response.getEntity());
+	code = response.getStatusLine().getStatusCode();
+
+	responseDict[&#39;code&#39;] = code;
+	responseDict[&#39;body&#39;] = responseBody
+	
+	return responseDict;
+}
+
+def LMPOST(_accessId, _accessKey, _account, _resourcePath, _queryParameters, _data) {
+
+	// Initialize dictionary to hold response code and response body
+	responseDict = [:];
+
+	// Construcst URL to POST to from specified input
+	url = &#39;https://&#39; + _account + &#39;.logicmonitor.com&#39; + &#39;/santaba/rest&#39; + _resourcePath + _queryParameters;
+
+	StringEntity params = new StringEntity(_data,ContentType.APPLICATION_JSON);
+
+	// Get current time
+	epoch = System.currentTimeMillis();
+
+	// Calculate signature
+	requestVars = &#39;POST&#39; + epoch + _data + _resourcePath;
+
+	hmac = Mac.getInstance(&#39;HmacSHA256&#39;);
+	secret = new SecretKeySpec(_accessKey.getBytes(), &#39;HmacSHA256&#39;);
+	hmac.init(secret);
+	hmac_signed = Hex.encodeHexString(hmac.doFinal(requestVars.getBytes()));
+	signature = hmac_signed.bytes.encodeBase64();
+
+	// HTTP Get
+	CloseableHttpClient httpclient = HttpClients.createDefault();
+	http_request = new HttpPost(url);
+	http_request.addHeader(&#34;Authorization&#34; , &#34;LMv1 &#34; + _accessId + &#34;:&#34; + signature + &#34;:&#34; + epoch);
+	http_request.setHeader(&#34;Accept&#34;, &#34;application/json&#34;);
+	http_request.setHeader(&#34;Content-type&#34;, &#34;application/json&#34;);
+	http_request.setEntity(params);
+	response = httpclient.execute(http_request);
+	responseBody = EntityUtils.toString(response.getEntity());
+	code = response.getStatusLine().getStatusCode();
+
+	responseDict[&#39;code&#39;] = code;
+	responseDict[&#39;body&#39;] = responseBody
+	
+	return responseDict;
+}
+
+return 0;</wildcardgroovyscript>
+        <wildcardschedule>1440</wildcardschedule>
+        <wildcarddisable>false</wildcarddisable>
+        <wildcarddeleteinactive>true</wildcarddeleteinactive>
+        <agdmethod>none</agdmethod>
+        <agdparams></agdparams>
+        <group></group>
+        <tags></tags>
+        <technology>Apply this DataSource to a SINGLE device (ideally a Collector) with the following device level properties:
+
+lmaccess.id = Access ID (API Token)
+lmaccess.key = Access Key (API Token)
+lmaccount = LogicMonitor portal subdomain (subdomain.logicmonitor.com)
+
+This DataSource collects device groups with the &#34;device_limit&#34; property as instances. 
+ It monitors the device count of these instances, and dynamically updates instance level alert thresholds for each group based on the &#34;device_limit&#34; property.</technology>
+        <adlist><![CDATA[{"agdmethod":"none","method":"ad_script","agdparams":"","id":0,"filters":[],"params":{"type":"embeded","groovyscript":"import com.santaba.agent.groovyapi.expect.Expect;\nimport com.santaba.agent.groovyapi.snmp.Snmp;\nimport com.santaba.agent.groovyapi.http.*;\nimport com.santaba.agent.groovyapi.jmx.*;\nimport org.xbill.DNS.*;\nimport org.apache.http.HttpEntity;\nimport org.apache.http.client.methods.CloseableHttpResponse;\nimport org.apache.http.client.methods.HttpGet;\nimport org.apache.http.client.methods.HttpPost;\nimport org.apache.http.client.methods.HttpPut;\nimport org.apache.http.impl.client.CloseableHttpClient;\nimport org.apache.http.impl.client.HttpClients\nimport org.apache.http.util.EntityUtils;\nimport javax.crypto.Mac;\nimport javax.crypto.spec.SecretKeySpec;\nimport org.apache.commons.codec.binary.Hex;\nimport groovy.json.JsonSlurper;\nimport org.apache.http.entity.StringEntity;\nimport org.apache.http.entity.ContentType;\n\ndef accessId = hostProps.get(\"lmaccess.id\");\ndef accessKey = hostProps.get(\"lmaccess.key\");\ndef account = hostProps.get(\"lmaccount\");\n// Obtain deviceId from host level properties\ndef deviceId = hostProps.get(\"system.deviceId\");\n\n// GET all groups and their corresponding id, name, and customProperties fields\ndef resourcePath = \"/device/groups\";\ndef queryParameters = \"?fields=id,name,customProperties\";\ndef data = \"\";\n\nresponseDict = LMGET(accessId, accessKey, account, resourcePath, queryParameters, data);\nresponseBody = responseDict.body;\nresponseCode = responseDict.code;\n\noutput = new JsonSlurper().parseText(responseBody);\n\n// Isolate array containing groups\ngroupArray = output.data.items;\n\n// Initialize holder array to hold a dictionary corresponding to each group\nholder = [];\n\n// Iterate through output of GET request for device groups\ngroupArray.each { item ->\n\tcustomPropertiesArray = item.customProperties;\n\t// Iterate through the customProperties for each group in groupArray\n\tcustomPropertiesArray.each { thing ->\n\t\t// If we come across the device_limit custom property, then we want to monitor this group\n\t\tif(thing.name == 'device_limit') {\n\t\t\t// Initialize groupDict which will be appended to the holder array and add groupId, groupName, and device_limit value\n\t\t\tgroupDict = [:];\n\t\t\tgroupDict['id'] = item.id;\n\t\t\tgroupDict['name'] = item.name;\n\t\t\tgroupDict['device_limit'] = thing.value;\n\t\t\tholder.add(groupDict);\n\t\t}\n\t}\n}\n\n\n// Now we GET the Group_Device_Count datasource\nresourcePath = \"/device/devices/\" + deviceId + \"/devicedatasources\";\nqueryParameters = \"?filter=dataSourceName:Group_Device_Count\";\ndata = \"\";\n\n// Get the ID of the Group Device Count DataSource\nresponseDict = LMGET(accessId, accessKey, account, resourcePath, queryParameters, data);\nresponseBody = responseDict.body;\nresponseCode = responseDict.code;\n\noutput = new JsonSlurper().parseText(responseBody);\n\n// Why in the world there is a device datasource ID I will never know\ndeviceDataSourceId = output.data.items[0].id;\n\n// Output for Active Discovery script\nholder.each { item ->\n\tprintln(item.id + '##' + item.name + '######' + 'auto.device_limit=' + item.device_limit + '&auto.device_datasource_id=' + deviceDataSourceId);\n}\n\n\nreturn 0;\n\n///////////////////////\n//  Helper Functions //\n///////////////////////\n\ndef LMPUT(_accessId, _accessKey, _account, _resourcePath, _queryParameters, _data) {\n\n\t// Initialize dictionary to hold response code and response body\n\tresponseDict = [:];\n\n\t// Construcst URL to POST to from specified input\n\turl = 'https://' + _account + '.logicmonitor.com' + '/santaba/rest' + _resourcePath + _queryParameters;\n\n\tStringEntity params = new StringEntity(_data,ContentType.APPLICATION_JSON);\n\n\t// Get current time\n\tepoch = System.currentTimeMillis();\n\n\t// Calculate signature\n\trequestVars = 'PUT' + epoch + _data + _resourcePath;\n\n\thmac = Mac.getInstance('HmacSHA256');\n\tsecret = new SecretKeySpec(_accessKey.getBytes(), 'HmacSHA256');\n\thmac.init(secret);\n\thmac_signed = Hex.encodeHexString(hmac.doFinal(requestVars.getBytes()));\n\tsignature = hmac_signed.bytes.encodeBase64();\n\n\t// HTTP Get\n\tCloseableHttpClient httpclient = HttpClients.createDefault();\n\thttp_request = new HttpPut(url);\n\thttp_request.addHeader(\"Authorization\" , \"LMv1 \" + _accessId + \":\" + signature + \":\" + epoch);\n\thttp_request.setHeader(\"Accept\", \"application/json\");\n\thttp_request.setHeader(\"Content-type\", \"application/json\");\n\thttp_request.setEntity(params);\n\tresponse = httpclient.execute(http_request);\n\tresponseBody = EntityUtils.toString(response.getEntity());\n\tcode = response.getStatusLine().getStatusCode();\n\n\tresponseDict['code'] = code;\n\tresponseDict['body'] = responseBody\n\t\n\treturn responseDict;\n}\n\ndef LMGET(_accessId, _accessKey, _account, _resourcePath, _queryParameters, _data) {\n\t// DATA SHOULD BE EMPTY\n\t// Initialize dictionary to hold response code and response body\n\tresponseDict = [:];\n\n\t// Construcst URL to POST to from specified input\n\turl = 'https://' + _account + '.logicmonitor.com' + '/santaba/rest' + _resourcePath + _queryParameters;\n\n\t// Get current time\n\tepoch = System.currentTimeMillis();\n\n\t// Calculate signature\n\trequestVars = 'GET' + epoch + _data + _resourcePath;\n\n\thmac = Mac.getInstance('HmacSHA256');\n\tsecret = new SecretKeySpec(_accessKey.getBytes(), 'HmacSHA256');\n\thmac.init(secret);\n\thmac_signed = Hex.encodeHexString(hmac.doFinal(requestVars.getBytes()));\n\tsignature = hmac_signed.bytes.encodeBase64();\n\n\t// HTTP Get\n\tCloseableHttpClient httpclient = HttpClients.createDefault();\n\thttp_request = new HttpGet(url);\n\thttp_request.addHeader(\"Authorization\" , \"LMv1 \" + _accessId + \":\" + signature + \":\" + epoch);\n\tresponse = httpclient.execute(http_request);\n\tresponseBody = EntityUtils.toString(response.getEntity());\n\tcode = response.getStatusLine().getStatusCode();\n\n\tresponseDict['code'] = code;\n\tresponseDict['body'] = responseBody\n\t\n\treturn responseDict;\n}\n\ndef LMPOST(_accessId, _accessKey, _account, _resourcePath, _queryParameters, _data) {\n\n\t// Initialize dictionary to hold response code and response body\n\tresponseDict = [:];\n\n\t// Construcst URL to POST to from specified input\n\turl = 'https://' + _account + '.logicmonitor.com' + '/santaba/rest' + _resourcePath + _queryParameters;\n\n\tStringEntity params = new StringEntity(_data,ContentType.APPLICATION_JSON);\n\n\t// Get current time\n\tepoch = System.currentTimeMillis();\n\n\t// Calculate signature\n\trequestVars = 'POST' + epoch + _data + _resourcePath;\n\n\thmac = Mac.getInstance('HmacSHA256');\n\tsecret = new SecretKeySpec(_accessKey.getBytes(), 'HmacSHA256');\n\thmac.init(secret);\n\thmac_signed = Hex.encodeHexString(hmac.doFinal(requestVars.getBytes()));\n\tsignature = hmac_signed.bytes.encodeBase64();\n\n\t// HTTP Get\n\tCloseableHttpClient httpclient = HttpClients.createDefault();\n\thttp_request = new HttpPost(url);\n\thttp_request.addHeader(\"Authorization\" , \"LMv1 \" + _accessId + \":\" + signature + \":\" + epoch);\n\thttp_request.setHeader(\"Accept\", \"application/json\");\n\thttp_request.setHeader(\"Content-type\", \"application/json\");\n\thttp_request.setEntity(params);\n\tresponse = httpclient.execute(http_request);\n\tresponseBody = EntityUtils.toString(response.getEntity());\n\tcode = response.getStatusLine().getStatusCode();\n\n\tresponseDict['code'] = code;\n\tresponseDict['body'] = responseBody\n\t\n\treturn responseDict;\n}\n\nreturn 0;"}}]]></adlist>
+        <schemaVersion>2</schemaVersion>
+        <dataSourceType>1</dataSourceType>
+        <attributes>
+        <attribute>
+            <name>scripttype</name>
+            <value>embed</value>
+            <comment></comment>
+        </attribute>
+        <attribute>
+            <name>scriptgroovy</name>
+            <value>import com.santaba.agent.groovyapi.expect.Expect;
+import com.santaba.agent.groovyapi.snmp.Snmp;
+import com.santaba.agent.groovyapi.http.*;
+import com.santaba.agent.groovyapi.jmx.*;
+import org.xbill.DNS.*;
+import org.apache.http.HttpEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpPut;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients
+import org.apache.http.util.EntityUtils;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import org.apache.commons.codec.binary.Hex;
+import groovy.json.JsonSlurper;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.entity.ContentType;
+
+def accessId = hostProps.get(&#34;lmaccess.id&#34;);
+def accessKey = hostProps.get(&#34;lmaccess.key&#34;);
+def account = hostProps.get(&#34;lmaccount&#34;);
+
+// Obtain all the necessary parameters for the coming HTTP requests
+def wildvalue = instanceProps.get(&#34;wildvalue&#34;);
+def wildalias = instanceProps.get(&#34;wildalias&#34;);
+def deviceId = hostProps.get(&#34;system.deviceId&#34;);
+def deviceLimit = instanceProps.get(&#34;auto.device_limit&#34;);
+def deviceDataSourceId = instanceProps.get(&#34;auto.device_datasource_id&#34;);
+
+// GET a list of devices in ##WILDVALUE## group
+def resourcePath = &#34;/device/groups/&#34; + wildvalue + &#34;/devices&#34;;
+def queryParameters = &#34;?size=1000&#34;;
+def data = &#34;&#34;;
+
+responseDict = LMGET(accessId, accessKey, account, resourcePath, queryParameters, data);
+responseBody = responseDict.body;
+responseCode = responseDict.code;
+
+output = new JsonSlurper().parseText(responseBody);
+
+// total corresponds to the number of devices returned in the items array of data in the GET request
+deviceCount = output.data.total;
+// Output for device_count datapoint
+println(&#34;device_count=&#34; + deviceCount);
+
+
+////////////////////////
+// ALERT MODIFICATION //
+////////////////////////
+
+// First, we use our previously obtained deviceId and deviceDataSourceId to obtain the instanceId of our current instance
+resourcePath = &#34;/device/devices/&#34; + deviceId + &#34;/devicedatasources/&#34; + deviceDataSourceId + &#34;/instances&#34;
+queryParameters = &#34;?filter=displayName:&#34; + wildalias;
+data = &#34;&#34;
+
+responseDict = LMGET(accessId, accessKey, account, resourcePath, queryParameters, data);
+responseBody = responseDict.body;
+responseCode = responseDict.code;
+
+output = new JsonSlurper().parseText(responseBody);
+
+instanceId = output.data.items[0].id;
+
+// Now we have:
+// deviceId || deviceDataSourceId || instanceId 
+//
+// Let&#39;s GET:
+// alertSettingId = Instance level alert threshhold
+
+resourcePath = &#34;/device/devices/&#34; + deviceId + &#34;/devicedatasources/&#34; + deviceDataSourceId + &#34;/instances/&#34; + instanceId + &#34;/alertsettings&#34;;
+queryParameters = &#34;&#34;;
+data = &#34;&#34;;
+
+responseDict = LMGET(accessId, accessKey, account, resourcePath, queryParameters, data);
+responseBody = responseDict.body;
+responseCode = responseDict.code;
+
+output = new JsonSlurper().parseText(responseBody);
+
+alertSettingId = output.data.items[0].id;
+
+// Now we have:
+// deviceId || deviceDataSourceId || instanceId || alertSettingId 
+//
+// Let&#39;s POST:
+// alertExpr = Payload modifying alert threshold
+//
+// IF device_limit == 0, POST an empty alertExpr to clear thresholds
+
+if (deviceLimit == &#34;0&#34;) {
+	resourcePath = &#34;/device/devices/&#34; + deviceId + &#34;/devicedatasources/&#34; + deviceDataSourceId + &#34;/instances/&#34; + instanceId + &#34;/alertsettings/&#34; + alertSettingId;
+	queryParameters = &#34;&#34;;
+	// This payload currently triggers a WARNING alert if the device_limit threshold is exceeded
+	data = &#39;{&#34;alertExpr&#34;:&#34;&#34;}&#39;;
+
+	responseDict = LMPUT(accessId, accessKey, account, resourcePath, queryParameters, data);
+	responseBody = responseDict.body;
+	responseCode = responseDict.code;
+
+	output = new JsonSlurper().parseText(responseBody);
+	println(responseBody)
+}
+else {
+	resourcePath = &#34;/device/devices/&#34; + deviceId + &#34;/devicedatasources/&#34; + deviceDataSourceId + &#34;/instances/&#34; + instanceId + &#34;/alertsettings/&#34; + alertSettingId;
+	queryParameters = &#34;&#34;;
+	// This payload currently triggers a WARNING alert if the device_limit threshold is exceeded
+	data = &#39;{&#34;alertExpr&#34;:&#34;&#62; &#39; + deviceLimit + &#39;&#34;}&#39;;
+
+	responseDict = LMPUT(accessId, accessKey, account, resourcePath, queryParameters, data);
+	responseBody = responseDict.body;
+	responseCode = responseDict.code;
+
+	output = new JsonSlurper().parseText(responseBody);
+	println(responseBody)
+}
+
+
+
+
+return 0;
+
+///////////////////////
+//  Helper Functions //
+///////////////////////
+
+def LMPUT(_accessId, _accessKey, _account, _resourcePath, _queryParameters, _data) {
+
+	// Initialize dictionary to hold response code and response body
+	responseDict = [:];
+
+	// Construcst URL to POST to from specified input
+	url = &#39;https://&#39; + _account + &#39;.logicmonitor.com&#39; + &#39;/santaba/rest&#39; + _resourcePath + _queryParameters;
+
+	StringEntity params = new StringEntity(_data,ContentType.APPLICATION_JSON);
+
+	// Get current time
+	epoch = System.currentTimeMillis();
+
+	// Calculate signature
+	requestVars = &#39;PUT&#39; + epoch + _data + _resourcePath;
+
+	hmac = Mac.getInstance(&#39;HmacSHA256&#39;);
+	secret = new SecretKeySpec(_accessKey.getBytes(), &#39;HmacSHA256&#39;);
+	hmac.init(secret);
+	hmac_signed = Hex.encodeHexString(hmac.doFinal(requestVars.getBytes()));
+	signature = hmac_signed.bytes.encodeBase64();
+
+	// HTTP Get
+	CloseableHttpClient httpclient = HttpClients.createDefault();
+	http_request = new HttpPut(url);
+	http_request.addHeader(&#34;Authorization&#34; , &#34;LMv1 &#34; + _accessId + &#34;:&#34; + signature + &#34;:&#34; + epoch);
+	http_request.setHeader(&#34;Accept&#34;, &#34;application/json&#34;);
+	http_request.setHeader(&#34;Content-type&#34;, &#34;application/json&#34;);
+	http_request.setEntity(params);
+	response = httpclient.execute(http_request);
+	responseBody = EntityUtils.toString(response.getEntity());
+	code = response.getStatusLine().getStatusCode();
+
+	responseDict[&#39;code&#39;] = code;
+	responseDict[&#39;body&#39;] = responseBody
+	
+	return responseDict;
+}
+
+def LMGET(_accessId, _accessKey, _account, _resourcePath, _queryParameters, _data) {
+	// DATA SHOULD BE EMPTY
+	// Initialize dictionary to hold response code and response body
+	responseDict = [:];
+
+	// Construcst URL to POST to from specified input
+	url = &#39;https://&#39; + _account + &#39;.logicmonitor.com&#39; + &#39;/santaba/rest&#39; + _resourcePath + _queryParameters;
+
+	// Get current time
+	epoch = System.currentTimeMillis();
+
+	// Calculate signature
+	requestVars = &#39;GET&#39; + epoch + _data + _resourcePath;
+
+	hmac = Mac.getInstance(&#39;HmacSHA256&#39;);
+	secret = new SecretKeySpec(_accessKey.getBytes(), &#39;HmacSHA256&#39;);
+	hmac.init(secret);
+	hmac_signed = Hex.encodeHexString(hmac.doFinal(requestVars.getBytes()));
+	signature = hmac_signed.bytes.encodeBase64();
+
+	// HTTP Get
+	CloseableHttpClient httpclient = HttpClients.createDefault();
+	http_request = new HttpGet(url);
+	http_request.addHeader(&#34;Authorization&#34; , &#34;LMv1 &#34; + _accessId + &#34;:&#34; + signature + &#34;:&#34; + epoch);
+	response = httpclient.execute(http_request);
+	responseBody = EntityUtils.toString(response.getEntity());
+	code = response.getStatusLine().getStatusCode();
+
+	responseDict[&#39;code&#39;] = code;
+	responseDict[&#39;body&#39;] = responseBody
+	
+	return responseDict;
+}
+
+def LMPOST(_accessId, _accessKey, _account, _resourcePath, _queryParameters, _data) {
+
+	// Initialize dictionary to hold response code and response body
+	responseDict = [:];
+
+	// Construcst URL to POST to from specified input
+	url = &#39;https://&#39; + _account + &#39;.logicmonitor.com&#39; + &#39;/santaba/rest&#39; + _resourcePath + _queryParameters;
+
+	StringEntity params = new StringEntity(_data,ContentType.APPLICATION_JSON);
+
+	// Get current time
+	epoch = System.currentTimeMillis();
+
+	// Calculate signature
+	requestVars = &#39;POST&#39; + epoch + _data + _resourcePath;
+
+	hmac = Mac.getInstance(&#39;HmacSHA256&#39;);
+	secret = new SecretKeySpec(_accessKey.getBytes(), &#39;HmacSHA256&#39;);
+	hmac.init(secret);
+	hmac_signed = Hex.encodeHexString(hmac.doFinal(requestVars.getBytes()));
+	signature = hmac_signed.bytes.encodeBase64();
+
+	// HTTP Get
+	CloseableHttpClient httpclient = HttpClients.createDefault();
+	http_request = new HttpPost(url);
+	http_request.addHeader(&#34;Authorization&#34; , &#34;LMv1 &#34; + _accessId + &#34;:&#34; + signature + &#34;:&#34; + epoch);
+	http_request.setHeader(&#34;Accept&#34;, &#34;application/json&#34;);
+	http_request.setHeader(&#34;Content-type&#34;, &#34;application/json&#34;);
+	http_request.setEntity(params);
+	response = httpclient.execute(http_request);
+	responseBody = EntityUtils.toString(response.getEntity());
+	code = response.getStatusLine().getStatusCode();
+
+	responseDict[&#39;code&#39;] = code;
+	responseDict[&#39;body&#39;] = responseBody
+	
+	return responseDict;
+}</value>
+            <comment></comment>
+        </attribute>
+        <attribute>
+            <name>windowsscript</name>
+            <value></value>
+            <comment></comment>
+        </attribute>
+        <attribute>
+            <name>linuxscript</name>
+            <value></value>
+            <comment></comment>
+        </attribute>
+        <attribute>
+            <name>windowscmdline</name>
+            <value></value>
+            <comment></comment>
+        </attribute>
+        <attribute>
+            <name>linuxcmdline</name>
+            <value></value>
+            <comment></comment>
+        </attribute>
+        </attributes>
+        <datapoints>
+        <datapoint>
+            <name>device_count</name>
+            <dataType>7</dataType>
+            <type>2</type>
+            <postprocessormethod>namevalue</postprocessormethod>
+            <postprocessorparam>device_count</postprocessorparam>
+            <usevalue>output</usevalue>
+            <alertexpr></alertexpr>
+            <alertmissing>1</alertmissing>
+            <alertsubject></alertsubject>
+            <alertbody></alertbody>
+            <description></description>
+            <maxvalue></maxvalue>
+            <minvalue></minvalue>
+            <userparam1></userparam1>
+            <userparam2></userparam2>
+            <userparam3></userparam3>
+            <iscomposite>false</iscomposite>
+            <rpn></rpn>
+            <alertTransitionIval>0</alertTransitionIval>
+            <alertClearTransitionIval>0</alertClearTransitionIval>
+        </datapoint>
+        </datapoints>
+        <graphs>
+        </graphs>
+        <overviewgraphs>
+        <overviewgraph>
+            <name>Group Device Count</name>
+            <title>Group Device Count</title>
+            <verticallabel>Devices</verticallabel>
+            <rigid>false</rigid>
+            <maxvalue>NaN</maxvalue>
+            <minvalue>NaN</minvalue>
+            <displayprio>1</displayprio>
+            <timescale>1day</timescale>
+            <base1024>false</base1024>
+            <aggregated>false</aggregated>
+            <datapoints>
+        <overviewgraphdatapoint>
+            <name>device_count</name>
+            <datapointname>device_count</datapointname>
+            <cf>1</cf>
+            <aggregateMethod>sum</aggregateMethod>
+        </overviewgraphdatapoint>
+            </datapoints>
+            <virtualdatapoints>
+            </virtualdatapoints>
+            <lines>
+            <overviewgraphline>
+                <type>1</type>
+                <legend>##INSTANCE##</legend>
+                <datapointname>device_count</datapointname>
+                <isvirtualdatapoint>false</isvirtualdatapoint>
+                <color>silver</color>
+            </overviewgraphline>
+            </lines>
+        </overviewgraph>
+        </overviewgraphs>
+        <scripts>
+        </scripts>
+    </entry>
+</feed>
