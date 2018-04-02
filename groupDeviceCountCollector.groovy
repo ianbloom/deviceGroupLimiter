@@ -89,19 +89,7 @@ alertSettingId = output.data.items[0].id;
 //
 // IF device_limit == 0, POST an empty alertExpr to clear thresholds
 
-if (deviceLimit == 0) {
-	resourcePath = "/device/devices/" + deviceId + "/devicedatasources/" + deviceDataSourceId + "/instances/" + instanceId + "/alertsettings/" + alertSettingId;
-	queryParameters = "";
-	// This payload currently triggers a WARNING alert if the device_limit threshold is exceeded
-	data = '{"alertExpr":"> ' + deviceLimit + '"}';
-
-	responseDict = LMPUT(accessId, accessKey, account, resourcePath, queryParameters, data);
-	responseBody = responseDict.body;
-	responseCode = responseDict.code;
-
-	output = new JsonSlurper().parseText(responseBody);
-}
-else {
+if (deviceLimit == "0") {
 	resourcePath = "/device/devices/" + deviceId + "/devicedatasources/" + deviceDataSourceId + "/instances/" + instanceId + "/alertsettings/" + alertSettingId;
 	queryParameters = "";
 	// This payload currently triggers a WARNING alert if the device_limit threshold is exceeded
@@ -112,6 +100,20 @@ else {
 	responseCode = responseDict.code;
 
 	output = new JsonSlurper().parseText(responseBody);
+	println(responseBody)
+}
+else {
+	resourcePath = "/device/devices/" + deviceId + "/devicedatasources/" + deviceDataSourceId + "/instances/" + instanceId + "/alertsettings/" + alertSettingId;
+	queryParameters = "";
+	// This payload currently triggers a WARNING alert if the device_limit threshold is exceeded
+	data = '{"alertExpr":"> ' + deviceLimit + '"}';
+
+	responseDict = LMPUT(accessId, accessKey, account, resourcePath, queryParameters, data);
+	responseBody = responseDict.body;
+	responseCode = responseDict.code;
+
+	output = new JsonSlurper().parseText(responseBody);
+	println(responseBody)
 }
 
 
