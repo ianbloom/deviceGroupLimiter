@@ -89,6 +89,7 @@ alertSettingId = output.data.items[0].id;
 
 resourcePath = "/device/devices/" + deviceId + "/devicedatasources/" + deviceDataSourceId + "/instances/" + instanceId + "/alertsettings/" + alertSettingId;
 queryParameters = "";
+// This payload currently triggers a WARNING alert if the device_limit threshold is exceeded
 data = '{"alertExpr":"> ' + deviceLimit + '"}';
 
 responseDict = LMPUT(accessId, accessKey, account, resourcePath, queryParameters, data);
