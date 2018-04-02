@@ -1,3 +1,9 @@
+import com.santaba.agent.groovyapi.expect.Expect;
+import com.santaba.agent.groovyapi.snmp.Snmp;
+import com.santaba.agent.groovyapi.http.*;
+import com.santaba.agent.groovyapi.jmx.*;
+import org.xbill.DNS.*;
+
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -17,64 +23,21 @@ def accessId = "dSpe6j9eTQXs3Iph7jCU";
 def accessKey = "dcm!p2d2w79V=5f}+[354xL=g{k442Y6h5qV}C_6";
 def account = "ianbloom";
 
-def resourcePath = "/device/groups";
-def queryParameters = "?fields=id,name,customProperties";
+def wildvalue = instanceProps.get("wildvalue");
+def wildalias = instanceProps.get("wildalias");
+
+def resourcePath = "/device/groups/" + wildvalue + "/devices";
+def queryParameters = "?size=1000";
 def data = "";
 
-// Get all groups, and their id, name, and customProperties fields
 responseDict = LMGET(accessId, accessKey, account, resourcePath, queryParameters, data);
 responseBody = responseDict.body;
 responseCode = responseDict.code;
 
 output = new JsonSlurper().parseText(responseBody);
-
-groupArray = output.data.items;
-
-// Initialize holder array to hold a dictionary corresponding to each group
-holder = [];
-
-// Iterate through output of GET request for device groups
-groupArray.each { item ->
-	customPropertiesArray = item.customProperties;
-	// Iterate through the customProperties for each group in groupArray
-	customPropertiesArray.each { thing ->
-		// If we come across the device_limit custom property, then we want to monitor this group
-		if(thing.name == 'device_limit') {
-			// Initialize groupDict which will be appended to the holder array and add groupId, groupName, and device_limit value
-			groupDict = [:];
-			groupDict['id'] = item.id;
-			groupDict['name'] = item.name;
-			groupDict['device_limit'] = thing.value;
-			holder.add(groupDict);
-		}
-	}
-}
-
-// Output for Active Discovery script
-holder.each { item ->
-	println(item.id + '##' + item.name + '######' + 'auto.device_limit=' + item.device_limit);
-}
-
-// Configure query for getting device count for each group
-holder.each { item ->
-	resourcePath = "/device/groups/" + item.id + "/devices"
-	queryParameters = "?size=1000";
-	data = "";
-
-	responseDict = LMGET(accessId, accessKey, account, resourcePath, queryParameters, data);
-	responseBody = responseDict.body;
-	responseCode = responseDict.code;
-
-	output = new JsonSlurper().parseText(responseBody);
 	
-	deviceCount = output.data.total;
-	println("device_count=" + deviceCount);
-}
-
-
-
-//println('body. ' + responseBody);
-//println('code. ' + responseCode);
+deviceCount = output.data.total;
+println("device_count=" + deviceCount);
 
 return 0;
 
@@ -193,5 +156,3 @@ def LMPOST(_accessId, _accessKey, _account, _resourcePath, _queryParameters, _da
 	
 	return responseDict;
 }
-
-return 0;
