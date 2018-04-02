@@ -16,6 +16,8 @@ import org.apache.http.entity.ContentType;
 def accessId = "dSpe6j9eTQXs3Iph7jCU";
 def accessKey = "dcm!p2d2w79V=5f}+[354xL=g{k442Y6h5qV}C_6";
 def account = "ianbloom";
+// WE NEED TO GET THIS AUTOMATICALLY
+def deviceId = 1;
 
 def resourcePath = "/device/groups";
 def queryParameters = "?fields=id,name,customProperties";
@@ -50,31 +52,28 @@ groupArray.each { item ->
 	}
 }
 
+// Now we obtain the Group Device Count DataSource
+
+resourcePath = "/device/devices/" + deviceId + "/devicedatasources";
+queryParameters = "?filter=dataSourceName:Group_Device_Count";
+data = "";
+
+// Get the ID of the Group Device Count DataSource
+responseDict = LMGET(accessId, accessKey, account, resourcePath, queryParameters, data);
+responseBody = responseDict.body;
+responseCode = responseDict.code;
+
+output = new JsonSlurper().parseText(responseBody);
+
+// Why in the world there is a device datasource ID i will never know
+deviceDataSourceId = output.data.items[0].id;
+
 // Output for Active Discovery script
 holder.each { item ->
-	println(item.id + '##' + item.name + '######' + 'auto.device_limit=' + item.device_limit);
-}
-
-// Configure query for getting device count for each group
-holder.each { item ->
-	resourcePath = "/device/groups/" + item.id + "/devices"
-	queryParameters = "?size=1000";
-	data = "";
-
-	responseDict = LMGET(accessId, accessKey, account, resourcePath, queryParameters, data);
-	responseBody = responseDict.body;
-	responseCode = responseDict.code;
-
-	output = new JsonSlurper().parseText(responseBody);
-	
-	deviceCount = output.data.total;
-	println("device_count=" + deviceCount);
+	println(item.id + '##' + item.name + '######' + 'auto.device_limit=' + item.device_limit + '&auto.device_datasource_id=' + deviceDataSourceId);
 }
 
 
-
-//println('body. ' + responseBody);
-//println('code. ' + responseCode);
 
 return 0;
 
