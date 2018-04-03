@@ -4,6 +4,10 @@ The Group Device Count DataSource utilizes the LogicMonitor API to query device 
 counts.  These device group folders exist as instances.  The DataSource then uses the API to update instance level alert
 thresholds to trigger alerts based on a user defined device limit, which is defined as a device group level property.
 
+The benefit of this approach is that MSP customers with read only access to their folders will still be able to see their 
+individually imposed device limit, while the DataSource view itself provides portal admins with a comprehensive view of all 
+customers.
+
 ## Setup
 ### Device Properties
 In order to reduce the number of API calls made during collection, it is recommended that this DataSource be applied to a 
