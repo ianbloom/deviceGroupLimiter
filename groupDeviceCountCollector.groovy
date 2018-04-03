@@ -23,8 +23,8 @@ def accessKey = hostProps.get("lmaccess.key");
 def account = hostProps.get("lmaccount");
 
 // Obtain all the necessary parameters for the coming HTTP requests
-def wildvalue = instanceProps.get("wildvalue");
-def wildalias = instanceProps.get("wildalias");
+def wildvalue = "##wildvalue##";
+def wildalias = "##wildalias##";
 def deviceId = hostProps.get("system.deviceId");
 def deviceLimit = instanceProps.get("auto.device_limit");
 def deviceDataSourceId = instanceProps.get("auto.device_datasource_id");
@@ -89,37 +89,24 @@ alertSettingId = output.data.items[0].id;
 //
 // IF device_limit == 0, POST an empty alertExpr to clear thresholds
 
-if (deviceLimit == "0") {
-	resourcePath = "/device/devices/" + deviceId + "/devicedatasources/" + deviceDataSourceId + "/instances/" + instanceId + "/alertsettings/" + alertSettingId;
-	queryParameters = "";
-	// This payload currently triggers a WARNING alert if the device_limit threshold is exceeded
-	data = '{"alertExpr":""}';
 
-	responseDict = LMPUT(accessId, accessKey, account, resourcePath, queryParameters, data);
-	responseBody = responseDict.body;
-	responseCode = responseDict.code;
+resourcePath = "/device/devices/" + deviceId + "/devicedatasources/" + deviceDataSourceId + "/instances/" + instanceId + "/alertsettings/" + alertSettingId;
+queryParameters = "";
+// This payload currently triggers a WARNING alert if the device_limit threshold is exceeded
+data = '{"alertExpr":"> ' + deviceLimit + '"}';
 
-	output = new JsonSlurper().parseText(responseBody);
-	println(responseBody)
+responseDict = LMPUT(accessId, accessKey, account, resourcePath, queryParameters, data);
+responseBody = responseDict.body;
+responseCode = responseDict.code;
+
+output = new JsonSlurper().parseText(responseBody);
+
+if(responseCode == 200) {
+    return 0;
 }
 else {
-	resourcePath = "/device/devices/" + deviceId + "/devicedatasources/" + deviceDataSourceId + "/instances/" + instanceId + "/alertsettings/" + alertSettingId;
-	queryParameters = "";
-	// This payload currently triggers a WARNING alert if the device_limit threshold is exceeded
-	data = '{"alertExpr":"> ' + deviceLimit + '"}';
-
-	responseDict = LMPUT(accessId, accessKey, account, resourcePath, queryParameters, data);
-	responseBody = responseDict.body;
-	responseCode = responseDict.code;
-
-	output = new JsonSlurper().parseText(responseBody);
-	println(responseBody)
+    return 1;
 }
-
-
-
-
-return 0;
 
 ///////////////////////
 //  Helper Functions //
