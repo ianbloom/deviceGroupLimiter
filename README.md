@@ -22,7 +22,7 @@ In addition, the user must apply the following group level property to device gr
 * device_limit
 
 This property is used to dynamically update the instance level alert threshhold for the "device_count" datapoint of the
-corresponding instance.  If device_limit is set to 0, then the instance will not alert on "device_count".
+corresponding instance.
 
 ## How It Works
 The Active Discovery script of this DataSource queries the LogicMonitor API for a list of device groups, if the script finds
